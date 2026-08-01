@@ -1,0 +1,50 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyo
+build/
+dist/
+wheels/
+*.egg-info
+.Python
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Downloads / media leftovers
+downloads/
+*.mp4
+*.webm
+*.mkv
+*.part
+*.ytdl
+*.temp
+
+# Secrets / local env (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# yt-dlp auth cookies (if used later)
+cookies.txt
+*.cookies
+
+# Logs / caches
+*.log
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

@@ -1,0 +1,17 @@
+services:
+  bot:
+    build: .
+    container_name: video-download-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - downloads:/app/downloads
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  downloads:
