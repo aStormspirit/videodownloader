@@ -7,6 +7,10 @@ services:
       - .env
     volumes:
       - downloads:/app/downloads
+      # Netscape cookies for YouTube (create empty file if not ready yet)
+      - ./cookies.txt:/app/cookies.txt:ro
+    environment:
+      YTDLP_COOKIES_FILE: /app/cookies.txt
     logging:
       driver: json-file
       options:

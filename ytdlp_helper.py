@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from yt_dlp import YoutubeDL
@@ -11,18 +12,41 @@ from yt_dlp.utils import DownloadError as YtDlpDownloadError
 from common import DownloadError, safe_name
 
 
+def _cookies_file() -> str | None:
+    raw = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+    path = Path(raw) if raw else Path("cookies.txt")
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    # Real Netscape rows only (ignore comments / placeholders)
+    has_rows = any(
+        line
+        and not line.startswith("#")
+        and "\t" in line
+        and "youtube" in line.lower()
+        for line in text.splitlines()
+    )
+    if not has_rows:
+        return None
+    return str(path.resolve())
+
+
 def download_with_ytdlp(
     url: str,
     output_dir: Path,
     *,
     prefix: str,
     error_label: str,
+    proxy: str | None = None,
 ) -> list[Path]:
     """Download a single video with yt-dlp. Returns saved file paths."""
     output_dir.mkdir(parents=True, exist_ok=True)
     outtmpl = str(output_dir / f"{prefix}_%(uploader|unknown)s_%(id)s.%(ext)s")
 
-    opts = {
+    opts: dict = {
         "outtmpl": {"default": outtmpl},
         "format": (
             "best[ext=mp4][protocol^=http][protocol!*=m3u8]/"
@@ -38,7 +62,18 @@ def download_with_ytdlp(
         "fragment_retries": 3,
         "restrictfilenames": True,
         "noplaylist": True,
+        "extractor_args": {
+            "youtube": {"player_client": ["android", "web", "android_vr", "tv"]},
+        },
     }
+
+    cookies = _cookies_file()
+    if cookies:
+        opts["cookiefile"] = cookies
+
+    if proxy:
+        opts["proxy"] = proxy
+        opts["socket_timeout"] = 30
 
     try:
         with YoutubeDL(opts) as ydl:

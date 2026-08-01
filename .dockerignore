@@ -4,6 +4,7 @@
 .cursor
 downloads
 .env
+cookies.txt
 *.md
 __pycache__
 *.py[oc]

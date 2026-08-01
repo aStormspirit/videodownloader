@@ -11,9 +11,16 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Update
 from telegram.constants import ChatAction
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    PreCheckoutQueryHandler,
+    filters,
+)
 
 from common import OUTPUT_DIR, DownloadError
 from instagram import download_instagram, extract_instagram_url
@@ -24,6 +31,7 @@ from youtube import download_youtube, extract_youtube_url
 
 # Telegram Bot API upload limit for bots (~50 MiB)
 MAX_UPLOAD_BYTES = 49 * 1024 * 1024
+DONATE_PAYLOAD = "donate-stars"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -43,6 +51,15 @@ def _max_concurrent_downloads() -> int:
         value = int(raw)
     except ValueError:
         return 3
+    return max(1, value)
+
+
+def _donate_stars_amount() -> int:
+    raw = os.getenv("DONATE_STARS", "50").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 50
     return max(1, value)
 
 
@@ -100,6 +117,59 @@ def _resolve_download(text: str):
 
 def _job_output_dir(user_id: int) -> Path:
     return OUTPUT_DIR / f"{user_id}_{uuid.uuid4().hex}"
+
+
+async def _send_donate_button(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Send a message with a Telegram Stars donate button."""
+    if not update.message:
+        return
+    amount = _donate_stars_amount()
+    try:
+        link = await context.bot.create_invoice_link(
+            title="Поддержка бота",
+            description=f"Спасибо за поддержку! Пожертвование {amount} ⭐",
+            payload=DONATE_PAYLOAD,
+            currency="XTR",
+            prices=[LabeledPrice(label="Donate", amount=amount)],
+        )
+    except Exception:
+        logger.exception("Failed to create Stars invoice link")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(f"Пожертвовать {amount} ⭐", url=link)]]
+    )
+    await update.message.reply_text(
+        "Если бот полезен — можно поддержать звёздами ⭐",
+        reply_markup=keyboard,
+    )
+
+
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.pre_checkout_query
+    if not query:
+        return
+    if query.invoice_payload != DONATE_PAYLOAD:
+        await query.answer(ok=False, error_message="Неверный платёж.")
+        return
+    await query.answer(ok=True)
+
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.successful_payment:
+        return
+    payment = update.message.successful_payment
+    logger.info(
+        "Stars donation: user=%s amount=%s %s charge=%s",
+        update.effective_user.id if update.effective_user else None,
+        payment.total_amount,
+        payment.currency,
+        payment.telegram_payment_charge_id,
+    )
+    await update.message.reply_text("Спасибо за поддержку! ⭐")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -213,6 +283,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
             if sent:
                 await status.edit_text(f"Готово ({sent}).")
+                await _send_donate_button(update, context)
             else:
                 await status.edit_text(
                     "Видео скачалось, но отправить в Telegram не удалось."
@@ -232,14 +303,17 @@ def main() -> None:
         )
 
     logger.info(
-        "Config: max_concurrent=%s allowed_users=%s",
+        "Config: max_concurrent=%s donate_stars=%s allowed_users=%s",
         _max_concurrent_downloads(),
+        _donate_stars_amount(),
         "all" if _allowed_user_ids() is None else sorted(_allowed_user_ids() or []),
     )
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
 
     logger.info("Bot starting…")

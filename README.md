@@ -58,12 +58,36 @@ docker compose down
 | `TELEGRAM_BOT_TOKEN` | Токен от @BotFather (обязательно) |
 | `ALLOWED_USER_IDS` | Список Telegram user id через запятую; пусто = всем |
 | `MAX_CONCURRENT_DOWNLOADS` | Макс. параллельных скачиваний (по умолчанию `3`) |
+| `DONATE_STARS` | Сумма доната в Telegram Stars на кнопке (по умолчанию `50`) |
+| `YTDLP_COOKIES_FILE` | Путь к `cookies.txt` для YouTube (в Docker: `/app/cookies.txt`) |
+| `YTDLP_PROXY` | HTTP-прокси только для YouTube, напр. `http://user:pass@host:port` |
 
 Свой id можно узнать у [@userinfobot](https://t.me/userinfobot).
+
+## YouTube: cookies (обязательно на VPS)
+
+С IP датацентров YouTube часто отвечает `Sign in to confirm you're not a bot`. Нужен файл cookies:
+
+1. Открой **Incognito** → войди в YouTube (лучше отдельный аккаунт).
+2. В той же вкладке открой `https://www.youtube.com/robots.txt`.
+3. Экспортируй cookies для `youtube.com` расширением (**Get cookies.txt LOCALLY** / **cookies.txt**).
+4. Закрой Incognito (чтобы сессия не ротировалась в браузере).
+5. Сохрани файл как `cookies.txt` в корне проекта и на сервере:
+
+```bash
+# локально → сервер
+scp -i ~/Загрузки/legion.pem cookies.txt ubuntu@16.16.170.143:~/video-download/cookies.txt
+
+ssh -i ~/Загрузки/legion.pem ubuntu@16.16.170.143
+cd ~/video-download
+sudo docker compose up -d --build
+```
+
+`cookies.txt` в git не коммитится. Не качай слишком часто с одного аккаунта — риск бана.
 
 ## Ограничения
 
 - Telegram принимает от бота файлы до ~50 МБ.
 - Приватные / удалённые посты не скачиваются.
-- С одного IP платформы могут ограничивать частые запросы (особенно TikTok / Instagram).
+- С одного IP платформы могут ограничивать частые запросы (особенно TikTok / Instagram / YouTube).
 - У пользователя одновременно обрабатывается только одна ссылка.

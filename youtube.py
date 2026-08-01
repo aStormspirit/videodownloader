@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -31,9 +32,12 @@ def download_youtube(url: str, output_dir: Path = OUTPUT_DIR) -> list[Path]:
     if "youtube.com" not in url.lower() and "youtu.be" not in url.lower():
         raise DownloadError("URL does not look like YouTube.")
 
+    proxy = os.getenv("YTDLP_PROXY", "").strip() or None
+
     return download_with_ytdlp(
         url,
         output_dir,
         prefix="yt",
         error_label="YouTube download failed",
+        proxy=proxy,
     )
