@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Update, User
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -94,6 +94,23 @@ def _is_allowed(user_id: int | None) -> bool:
     if allowed is None:
         return True
     return user_id is not None and user_id in allowed
+
+
+_PLATFORM_BY_DOWNLOADER = {
+    download_threads: "threads",
+    download_instagram: "instagram",
+    download_youtube: "youtube",
+    download_vk: "vk",
+    download_tiktok: "tiktok",
+}
+
+
+def _user_label(user: User | None) -> str:
+    if user is None:
+        return "user=None"
+    username = f"@{user.username}" if user.username else "-"
+    name = (user.full_name or "").strip() or "-"
+    return f"user={user.id} {username} name={name!r}"
 
 
 def _resolve_download(text: str):
@@ -203,7 +220,9 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     user = update.effective_user
     user_id = user.id if user else None
+    who = _user_label(user)
     if not _is_allowed(user_id):
+        logger.warning("Access denied: %s", who)
         await update.message.reply_text("Нет доступа.")
         return
     if user_id is None:
@@ -215,6 +234,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "Не вижу ссылку. Пришли URL Threads, Instagram, YouTube, VK или TikTok."
         )
         return
+
+    platform = _PLATFORM_BY_DOWNLOADER.get(downloader, "unknown")
 
     lock = _get_busy_lock()
     async with lock:
@@ -228,6 +249,12 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     paths: list[Path] = []
 
     try:
+        logger.info(
+            "Download start: %s platform=%s url=%s",
+            who,
+            platform,
+            url,
+        )
         status = await update.message.reply_text("Скачиваю…")
         await update.message.chat.send_action(ChatAction.UPLOAD_VIDEO)
 
@@ -235,15 +262,27 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             try:
                 paths = await asyncio.to_thread(downloader, url, job_dir)
             except DownloadError as exc:
-                logger.warning("Download failed for %s: %s", url, exc)
+                logger.warning(
+                    "Download fail: %s platform=%s url=%s error=%s",
+                    who,
+                    platform,
+                    url,
+                    exc,
+                )
                 await status.edit_text(f"Не удалось скачать: {exc}")
                 return
             except Exception:
-                logger.exception("Unexpected download error for %s", url)
+                logger.exception(
+                    "Download fail: %s platform=%s url=%s",
+                    who,
+                    platform,
+                    url,
+                )
                 await status.edit_text("Что-то пошло не так при скачивании.")
                 return
 
             sent = 0
+            total_size = 0
             for path in paths:
                 size = path.stat().st_size
                 if size > MAX_UPLOAD_BYTES:
@@ -264,6 +303,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                             read_timeout=120,
                         )
                     sent += 1
+                    total_size += size
                 except Exception:
                     logger.exception("Failed to send video %s", path)
                     try:
@@ -275,6 +315,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                                 read_timeout=120,
                             )
                         sent += 1
+                        total_size += size
                     except Exception:
                         logger.exception("Failed to send document %s", path)
                         await update.message.reply_text(
@@ -282,9 +323,23 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                         )
 
             if sent:
+                logger.info(
+                    "Download ok: %s platform=%s sent=%s size=%s url=%s",
+                    who,
+                    platform,
+                    sent,
+                    total_size,
+                    url,
+                )
                 await status.edit_text(f"Готово ({sent}).")
                 await _send_donate_button(update, context)
             else:
+                logger.warning(
+                    "Download fail: %s platform=%s url=%s error=send_failed",
+                    who,
+                    platform,
+                    url,
+                )
                 await status.edit_text(
                     "Видео скачалось, но отправить в Telegram не удалось."
                 )

@@ -7,8 +7,8 @@ services:
       - .env
     volumes:
       - downloads:/app/downloads
-      # Netscape cookies for YouTube (create empty file if not ready yet)
-      - ./cookies.txt:/app/cookies.txt:ro
+      # Netscape cookies for YouTube (rw: yt-dlp may refresh the file)
+      - ./cookies.txt:/app/cookies.txt
     environment:
       YTDLP_COOKIES_FILE: /app/cookies.txt
     logging:

@@ -40,7 +40,6 @@ def download_with_ytdlp(
     *,
     prefix: str,
     error_label: str,
-    proxy: str | None = None,
 ) -> list[Path]:
     """Download a single video with yt-dlp. Returns saved file paths."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -62,18 +61,23 @@ def download_with_ytdlp(
         "fragment_retries": 3,
         "restrictfilenames": True,
         "noplaylist": True,
+        # yt-dlp 2026+: YouTube n-challenge needs a JS runtime + yt-dlp-ejs
+        "js_runtimes": {"node": {}},
+        "remote_components": ["ejs:github"],
         "extractor_args": {
-            "youtube": {"player_client": ["android", "web", "android_vr", "tv"]},
+            # android clients skip cookies; prefer cookie-capable clients first
+            "youtube": {"player_client": ["web", "tv", "mweb", "web_safari"]},
         },
     }
 
     cookies = _cookies_file()
     if cookies:
         opts["cookiefile"] = cookies
-
-    if proxy:
-        opts["proxy"] = proxy
-        opts["socket_timeout"] = 30
+    else:
+        # Without cookies, android clients still help on some networks
+        opts["extractor_args"] = {
+            "youtube": {"player_client": ["android", "android_vr", "web", "tv"]},
+        }
 
     try:
         with YoutubeDL(opts) as ydl:

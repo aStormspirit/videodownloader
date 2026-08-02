@@ -28,8 +28,10 @@ downloads/
 .env.*
 !.env.example
 
-# yt-dlp auth cookies (if used later)
+# yt-dlp auth cookies
 cookies.txt
+youtube.txt
+youtubr.txt
 *.cookies
 
 # Logs / caches

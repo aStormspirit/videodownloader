@@ -38,6 +38,12 @@ docker compose up -d --build
 docker compose logs -f bot
 ```
 
+Активность пользователей (кто скачивал):
+
+```bash
+docker compose logs -f bot | grep Download
+```
+
 Обновление:
 
 ```bash
@@ -60,7 +66,6 @@ docker compose down
 | `MAX_CONCURRENT_DOWNLOADS` | Макс. параллельных скачиваний (по умолчанию `3`) |
 | `DONATE_STARS` | Сумма доната в Telegram Stars на кнопке (по умолчанию `50`) |
 | `YTDLP_COOKIES_FILE` | Путь к `cookies.txt` для YouTube (в Docker: `/app/cookies.txt`) |
-| `YTDLP_PROXY` | HTTP-прокси только для YouTube, напр. `http://user:pass@host:port` |
 
 Свой id можно узнать у [@userinfobot](https://t.me/userinfobot).
 
@@ -84,6 +89,8 @@ sudo docker compose up -d --build
 ```
 
 `cookies.txt` в git не коммитится. Не качай слишком часто с одного аккаунта — риск бана.
+
+Образ Docker ставит **Node.js 22** — yt-dlp решает YouTube JS-challenge (EJS) через него.
 
 ## Ограничения
 
