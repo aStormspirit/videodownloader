@@ -47,13 +47,15 @@ def download_with_ytdlp(
 
     opts: dict = {
         "outtmpl": {"default": outtmpl},
-        "format": (
-            "best[ext=mp4][protocol^=http][protocol!*=m3u8]/"
-            "best[ext=mp4]/"
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
-            "best"
-        ),
-        "merge_output_format": "mp4",
+        # Robust format selection:
+        # 1) Prefer MP4/H.264 + M4A (Telegram-friendly) when available
+        # 2) Fall back to progressive MP4
+        # 3) Fall back to any best video+audio, then any single best stream
+        "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+        # Prefer MP4/H.264/AAC when there is a tie, but do NOT require them
+        "format_sort": ["ext:mp4:m4a:webm", "vcodec:h264", "acodec:aac", "res", "fps"],
+        # Let yt-dlp choose the correct container; conversion isn't strictly required
+        # "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
@@ -80,38 +82,53 @@ def download_with_ytdlp(
         }
 
     try:
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if info is None:
-                raise DownloadError(f"{error_label}: yt-dlp returned no video info.")
+        def _run_with_opts(run_opts: dict) -> list[Path]:
+            with YoutubeDL(run_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                if info is None:
+                    raise DownloadError(f"{error_label}: yt-dlp returned no video info.")
 
-            if "entries" in info:
-                entries = [e for e in (info.get("entries") or []) if e]
-                if not entries:
-                    raise DownloadError(f"{error_label}: no video found in the link.")
-                info = entries[0]
+                if "entries" in info:
+                    entries = [e for e in (info.get("entries") or []) if e]
+                    if not entries:
+                        raise DownloadError(f"{error_label}: no video found in the link.")
+                    info = entries[0]
 
-            filename = ydl.prepare_filename(info)
-            path = Path(filename)
-            if path.suffix.lower() != ".mp4":
-                mp4 = path.with_suffix(".mp4")
-                if mp4.exists():
-                    path = mp4
+                filename = ydl.prepare_filename(info)
+                path = Path(filename)
+                if path.suffix.lower() != ".mp4":
+                    mp4 = path.with_suffix(".mp4")
+                    if mp4.exists():
+                        path = mp4
 
-            if not path.exists():
-                video_id = safe_name(str(info.get("id") or ""))
-                candidates = sorted(
-                    output_dir.glob(f"{prefix}_*_{video_id}.*"),
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )
-                if not candidates:
-                    raise DownloadError(
-                        f"{error_label}: download finished but file was not found."
+                if not path.exists():
+                    video_id = safe_name(str(info.get("id") or ""))
+                    candidates = sorted(
+                        output_dir.glob(f"{prefix}_*_{video_id}.*"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
                     )
-                path = candidates[0]
+                    if not candidates:
+                        raise DownloadError(
+                            f"{error_label}: download finished but file was not found."
+                        )
+                    path = candidates[0]
 
-            return [path]
+                return [path]
+
+        # First attempt with MP4-preferred, robust fallbacks
+        try:
+            return _run_with_opts(opts)
+        except YtDlpDownloadError as exc:
+            msg = str(exc)
+            # If the chosen format is unavailable, retry with the most permissive selector
+            if "Requested format is not available" in msg or "no such format" in msg.lower():
+                fallback_opts = dict(opts)
+                fallback_opts["format"] = "bv*+ba/b"
+                # Remove any format_sort bias to maximize availability
+                fallback_opts.pop("format_sort", None)
+                return _run_with_opts(fallback_opts)
+            raise
     except YtDlpDownloadError as exc:
         raise DownloadError(f"{error_label}: {exc}") from exc
     except DownloadError:
