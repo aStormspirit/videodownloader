@@ -1,0 +1,10 @@
+{
+  "name": "video-download",
+  "install": "curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=\"$HOME/.local/bin:$PATH\" && uv sync --frozen",
+  "terminals": [
+    {
+      "name": "bot",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\"; if [ -n \"$TELEGRAM_BOT_TOKEN\" ]; then uv run python bot.py; else echo 'TELEGRAM_BOT_TOKEN is not set. Add it as a secret to run the Telegram bot. CLI (no token): uv run python main.py <url>'; fi"
+    }
+  ]
+}
