@@ -1,5 +1,8 @@
 services:
   bot:
+    # On the server the image is pulled from GHCR (set by CI/CD).
+    # Locally `docker compose up --build` still builds from the Dockerfile.
+    image: ${BOT_IMAGE:-ghcr.io/astormspirit/videodownloader:latest}
     build: .
     container_name: video-download-bot
     restart: unless-stopped

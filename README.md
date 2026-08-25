@@ -57,6 +57,47 @@ docker compose up -d --build
 docker compose down
 ```
 
+## CI/CD: авто-деплой при пуше в `main`
+
+При каждом пуше в ветку `main` GitHub Actions (`.github/workflows/deploy.yml`):
+
+1. собирает Docker-образ и пушит его в **GitHub Container Registry** (`ghcr.io`);
+2. заходит на сервер по SSH, подтягивает свежий `docker-compose.yml` (`git reset --hard`), делает `docker compose pull` + `up -d` с новым образом.
+
+Запустить деплой вручную можно кнопкой **Run workflow** (вкладка Actions → Deploy).
+
+### Разовая подготовка сервера
+
+```bash
+# на сервере
+git clone https://github.com/aStormspirit/videodownloader.git ~/video-download
+cd ~/video-download
+cp .env.example .env   # впиши TELEGRAM_BOT_TOKEN и т.д.
+# положи cookies.txt (см. раздел про YouTube)
+```
+
+Установлены Docker + Docker Compose plugin. Первый запуск можно сделать руками
+(`docker compose up -d --build`) — дальше обновляет CI.
+
+### Секреты репозитория
+
+Settings → Secrets and variables → **Actions** → New repository secret:
+
+| Секрет | Описание |
+|---|---|
+| `SSH_HOST` | IP/домен сервера (напр. `16.16.170.143`) |
+| `SSH_USER` | пользователь SSH (напр. `ubuntu`) |
+| `SSH_PORT` | порт SSH (обычно `22`) |
+| `SSH_KEY` | приватный SSH-ключ целиком (содержимое `.pem` / `id_ed25519`) |
+| `DEPLOY_PATH` | путь к проекту на сервере (напр. `/home/ubuntu/video-download`) |
+| `GHCR_TOKEN` | GitHub PAT (classic) со scope `read:packages` — сервер тянет образ из ghcr |
+
+`GITHUB_TOKEN` для пуша образа Actions выдаёт автоматически — отдельно настраивать не нужно.
+
+> Если пакет в GHCR приватный, `GHCR_TOKEN` обязателен. Можно сделать пакет
+> публичным (Packages → пакет → Package settings → Change visibility) — тогда
+> строку с `docker login` в workflow можно убрать.
+
 ## Переменные окружения
 
 | Переменная | Описание |
