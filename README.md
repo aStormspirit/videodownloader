@@ -57,6 +57,27 @@ docker compose up -d --build
 docker compose down
 ```
 
+## Статистика (`/stats`)
+
+Бот считает скачивания, уникальных пользователей, объём, разбивку по
+платформам и донаты. Данные лежат в SQLite (`downloads/stats.db`) внутри
+persistent-тома `downloads` — **переживают передеплой** (в отличие от логов).
+
+Команда `/stats` доступна только админам (`STATS_ADMIN_IDS`, по умолчанию —
+`ALLOWED_USER_IDS`). Пример вывода:
+
+```
+📊 Статистика бота
+Скачиваний: 128
+Уникальных пользователей: 34
+Объём: 4.21 ГБ
+По платформам:
+  • youtube: 71
+  • tiktok: 33
+  ...
+Донаты: 3 на 150 ⭐
+```
+
 ## CI/CD: авто-деплой при пуше в `main`
 
 При каждом пуше в ветку `main` GitHub Actions (`.github/workflows/deploy.yml`):
@@ -106,6 +127,7 @@ Settings → Secrets and variables → **Actions** → New repository secret:
 | `ALLOWED_USER_IDS` | Список Telegram user id через запятую; пусто = всем |
 | `MAX_CONCURRENT_DOWNLOADS` | Макс. параллельных скачиваний (по умолчанию `3`) |
 | `DONATE_STARS` | Сумма доната в Telegram Stars на кнопке (по умолчанию `50`) |
+| `STATS_ADMIN_IDS` | Кто может вызывать `/stats`; пусто = берётся `ALLOWED_USER_IDS` |
 | `YTDLP_COOKIES_FILE` | Путь к `cookies.txt` для YouTube (в Docker: `/app/cookies.txt`) |
 
 Свой id можно узнать у [@userinfobot](https://t.me/userinfobot).

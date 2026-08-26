@@ -16,7 +16,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY common.py bot.py main.py ytdlp_helper.py \
+COPY common.py bot.py main.py ytdlp_helper.py stats.py \
      threads.py instagram.py youtube.py vk.py tiktok.py ./
 
 RUN useradd --create-home --uid 1000 bot \

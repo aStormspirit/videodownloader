@@ -22,6 +22,7 @@ from telegram.ext import (
     filters,
 )
 
+import stats
 from common import OUTPUT_DIR, DownloadError
 from instagram import download_instagram, extract_instagram_url
 from threads import download_threads, extract_threads_url
@@ -94,6 +95,24 @@ def _is_allowed(user_id: int | None) -> bool:
     if allowed is None:
         return True
     return user_id is not None and user_id in allowed
+
+
+def _stats_admin_ids() -> set[int]:
+    """User ids allowed to run /stats.
+
+    Uses STATS_ADMIN_IDS if set, otherwise falls back to ALLOWED_USER_IDS.
+    If neither is set, /stats is disabled (empty set) so stats are not
+    exposed publicly.
+    """
+    raw = os.getenv("STATS_ADMIN_IDS", "").strip()
+    if raw:
+        ids: set[int] = set()
+        for part in raw.split(","):
+            part = part.strip()
+            if part:
+                ids.add(int(part))
+        return ids
+    return _allowed_user_ids() or set()
 
 
 _PLATFORM_BY_DOWNLOADER = {
@@ -186,6 +205,12 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         payment.currency,
         payment.telegram_payment_charge_id,
     )
+    stats.record_donation(
+        update.effective_user.id if update.effective_user else None,
+        payment.total_amount,
+        payment.currency,
+        payment.telegram_payment_charge_id,
+    )
     await update.message.reply_text("Спасибо за поддержку! ⭐")
 
 
@@ -212,6 +237,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "  (также vm.tiktok.com / vt.tiktok.com)\n\n"
         "Бот скачает видео и пришлёт файл (лимит Telegram ~50 МБ)."
     )
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    user_id = update.effective_user.id if update.effective_user else None
+    admins = _stats_admin_ids()
+    if not admins or user_id not in admins:
+        return
+    await update.message.reply_text(stats.summary())
 
 
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -331,6 +366,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                     total_size,
                     url,
                 )
+                username = f"@{user.username}" if user and user.username else None
+                stats.record_download(user_id, username, platform, sent, total_size)
                 await status.edit_text(f"Готово ({sent}).")
                 await _send_donate_button(update, context)
             else:
@@ -367,6 +404,7 @@ def main() -> None:
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
